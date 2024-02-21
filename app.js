@@ -28,9 +28,11 @@ passportConfig();
 // [CORS error] 모든 브라우저에서 api 사용 허용
 app.use(
   cors({
-    origin: '*',
+    origin: true,
+    credentials: true,
   })
 );
+
 // url 로 보낸 데이터를 json 형식으로, form 형식으로 온 데이터를 처리
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
