@@ -25,6 +25,7 @@ module.exports = () => {
           return done(null, false, { reason: '틀린 비밀번호입니다. 다시 입력해주세요.' });
         } catch (err) {
           console.error(err);
+          return done(err);
         }
       }
     )
