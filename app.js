@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const passport = require('passport');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
+const path = require('path');
 
 const postRouter = require('./routes/post');
 const postsRouter = require('./routes/posts');
@@ -37,7 +38,11 @@ app.use(
   })
 );
 
-// url 로 보낸 데이터를 json 형식으로, form 형식으로 온 데이터를 처리
+// 익스프레스 static 미들웨어 사용
+app.use('/', express.static(path.join(__dirname, 'uploads')));
+
+// url 로 보낸 데이터를 json 형식으로,
+// form 형식으로 온 데이터를 처리
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(process.env.COOKIE_SECRET));

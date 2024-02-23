@@ -1,18 +1,67 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-const { Post, User, Image, Comment } = require('../models');
+const { Post, User, Image, Comment, Hashtag } = require('../models');
 const { isLoggedIn } = require('../middlewares');
 
 const router = express.Router();
 
-//POST /post
+try {
+  fs.accessSync('uploads');
+} catch (err) {
+  console.log('uploads 폴더가 없으므로 생성합니다.');
+  fs.mkdirSync('uploads');
+}
 
-router.post('/', isLoggedIn, async (req, res) => {
+// 이미지 미리보기 업로드
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, done) {
+      done(null, 'uploads');
+    },
+    filename(req, file, done) {
+      //사진.png
+      const ext = path.extname(file.originalname); // 확장자(png) 추출
+      const basename = path.basename(file.originalname, ext); // 이미지 이름(사진) 추출
+      done(null, basename + '_' + new Date().getTime() + ext); // 중복을 방지하기 위해 데이터 가공(사진1441523.png)
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, //20MB
+});
+
+//POST /post --- 게시글 작성
+
+router.post('/', isLoggedIn, upload.none(), async (req, res, next) => {
   try {
+    const hashtags = req.body.content.match(/#[^\s#]+/g);
     const post = await Post.create({
       content: req.body.content,
       UserId: req.user.id,
     });
+    if (hashtags) {
+      const result = await Promise.all(
+        hashtags.map((tag) =>
+          Hashtag.findOrCreate({
+            where: { name: tag.slice(1).toLowerCase() },
+          })
+        )
+      );
+      await post.addHashtags(result.map((v) => v[0]));
+    }
+    if (req.body.image) {
+      if (Array.isArray(req.body.image)) {
+        // 이미지를 여러 개 올리면 -> image:[이미지1.png, 이미지2.png]
+        const images = await Promise.all(req.body.image.map((i) => Image.create({ src: i })));
+        await post.addImages(images);
+      } else {
+        // 이미지를 하나만 올리면 -> image: 이미지.png
+        const image = await Image.create({ src: req.body.image });
+        await post.addImages(image);
+      }
+    }
     const fullPost = await Post.findOne({
       where: { id: post.id },
       include: [
@@ -46,7 +95,18 @@ router.post('/', isLoggedIn, async (req, res) => {
   }
 });
 
-// POST /post/:post.id/comment
+// POST /post/images --- 이미지 업로드
+router.post('/images', isLoggedIn, upload.array('image'), async (req, res, next) => {
+  try {
+    console.log(req.files);
+    res.json(req.files.map((i) => i.filename));
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+// POST /post/:post.id/comment --- 댓글 달기
 router.post('/:postId/comment', isLoggedIn, async (req, res) => {
   try {
     const post = await Post.findOne({
@@ -76,7 +136,7 @@ router.post('/:postId/comment', isLoggedIn, async (req, res) => {
   }
 });
 
-// PATCH /post/postId/like
+// PATCH /post/postId/like --- 좋아요
 router.patch('/:postId/like', async (req, res, next) => {
   try {
     const post = await Post.findOne({
@@ -94,7 +154,7 @@ router.patch('/:postId/like', async (req, res, next) => {
   }
 });
 
-// DELETE /post/postId/like
+// DELETE /post/postId/like --- 좋아요 취소
 router.delete('/:postId/like', async (req, res, next) => {
   try {
     const post = await Post.findOne({
@@ -106,6 +166,22 @@ router.delete('/:postId/like', async (req, res, next) => {
 
     await post.removeLikers(req.user.id);
     res.json({ PostId: post.id, UserId: req.user.id });
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+// DELETE /post/PostId --- 게시글 삭제하기
+router.delete('/:postId', isLoggedIn, async (req, res, next) => {
+  try {
+    await Post.destroy({
+      where: {
+        id: req.params.postId,
+        UserId: req.user.id,
+      },
+    });
+    res.status(200).json({ PostId: parseInt(req.params.postId, 10) });
   } catch (err) {
     console.error(err);
     next(err);
