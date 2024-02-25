@@ -7,9 +7,10 @@ const { route } = require('./post');
 
 const router = express.Router();
 
-// GET /user
+// GET /user --- 사용자 정보 조회
 
 router.get('/', async (req, res, next) => {
+  console.log(req.headers);
   try {
     if (req.user) {
       // 비밀번호를 제외하고, user 의 다른 정보를 함께 보내기
@@ -38,6 +39,49 @@ router.get('/', async (req, res, next) => {
       res.status(200).json(fullUserWithoutPassword);
     } else {
       res.status(200).json(null);
+    }
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+// GET /user --- 특정 사용자 정보 조회
+
+router.get('/:userId', async (req, res, next) => {
+  try {
+    // 비밀번호를 제외하고, user 의 다른 정보를 함께 보내기
+    console.log('params' + req.params.userId);
+    const fullUserWithoutPassword = await User.findOne({
+      where: { id: req.params.userId },
+      attributes: {
+        exclude: ['password'],
+      },
+      include: [
+        {
+          model: Post,
+          attributes: ['id'],
+        },
+        {
+          model: User,
+          as: 'Followings',
+          attributes: ['id'],
+        },
+        {
+          model: User,
+          as: 'Followers',
+          attributes: ['id'],
+        },
+      ],
+    });
+    if (fullUserWithoutPassword) {
+      const data = fullUserWithoutPassword.toJSON();
+      data.Posts = data.Posts.length;
+      data.Followers = data.Followers.length;
+      data.Followings = data.Followings.length;
+      res.status(200).json(data);
+    } else {
+      res.status(404).json('존재하지 않는 사용자입니다.');
     }
   } catch (err) {
     console.error(err);
