@@ -1,15 +1,14 @@
 const express = require('express');
+const { Post, Hashtag, Image, Comment, User } = require('../models');
 const { Op } = require('sequelize');
-
-const { Post, User, Image, Comment } = require('../models');
-
 const router = express.Router();
 
-// Get /posts
+// GET hashtag/hashtag--- 특정 해시태그 게시글 조회
 
-router.get('/', async (req, res, next) => {
+router.get('/:hashtag', async (req, res, next) => {
   try {
     const where = {};
+    console.log(decodeURIComponent(req.params.hashtag));
 
     // 초기 로딩이 아닐 경우 실행.
     if (parseInt(req.query.lastId, 10)) {
@@ -24,6 +23,10 @@ router.get('/', async (req, res, next) => {
         [Comment, 'createdAt', 'DESC'],
       ],
       include: [
+        {
+          model: Hashtag,
+          where: { name: decodeURIComponent(req.params.hashtag) },
+        },
         {
           model: User,
           attributes: ['id', 'nickname'],

@@ -1,9 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const passport = require('passport');
-const { User, Post } = require('../models');
+const { Op } = require('sequelize');
+
+const { User, Post, Comment, Image } = require('../models');
 const { isLoggedIn, isNotLoggedIn } = require('../middlewares');
-const { route } = require('./post');
 
 const router = express.Router();
 
@@ -46,12 +47,50 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// GET /user/followers --- 팔로워 목록 조회
+router.get('/followers', isLoggedIn, async (req, res, next) => {
+  try {
+    const user = await User.findOne({
+      where: { id: req.user.id },
+    });
+    if (!user) {
+      res.status(403).send('존재하지 않는 유저입니다.');
+    }
+    const followers = await user.getFollowers({
+      limit: parseInt(req.query.limit, 10),
+    });
+    res.status(200).json(followers);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+// GET /user/followings --- 팔로잉 목록 조회
+router.get('/followings', isLoggedIn, async (req, res, next) => {
+  try {
+    const user = await User.findOne({
+      where: { id: req.user.id },
+    });
+    if (!user) {
+      res.status(403).send('존재하지 않는 유저입니다.');
+    }
+    const followings = await user.getFollowings({
+      limit: parseInt(req.query.limit, 10),
+    });
+    res.status(200).json(followings);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
 // GET /user --- 특정 사용자 정보 조회
 
 router.get('/:userId', async (req, res, next) => {
   try {
     // 비밀번호를 제외하고, user 의 다른 정보를 함께 보내기
-    console.log('params' + req.params.userId);
+    console.log('userId :  ' + req.params.userId);
     const fullUserWithoutPassword = await User.findOne({
       where: { id: req.params.userId },
       attributes: {
@@ -86,6 +125,65 @@ router.get('/:userId', async (req, res, next) => {
   } catch (err) {
     console.error(err);
     next(err);
+  }
+});
+
+// GET user/userId/posts --- 특정 유저 게시글 조회
+
+router.get('/:userId/posts', async (req, res, next) => {
+  // GET /user/1/posts
+  try {
+    const where = { UserId: req.params.userId };
+    if (parseInt(req.query.lastId, 10)) {
+      // 초기 로딩이 아닐 때
+      where.id = { [Op.lt]: parseInt(req.query.lastId, 10) };
+    } // 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+    const posts = await Post.findAll({
+      where,
+      limit: 10,
+      order: [['createdAt', 'DESC']],
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'nickname'],
+        },
+        {
+          model: Image,
+        },
+        {
+          model: Comment,
+          include: [
+            {
+              model: User,
+              attributes: ['id', 'nickname'],
+              order: [['createdAt', 'DESC']],
+            },
+          ],
+        },
+        {
+          model: User, // 좋아요 누른 사람
+          as: 'Likers',
+          attributes: ['id'],
+        },
+        {
+          model: Post,
+          as: 'Retweet',
+          include: [
+            {
+              model: User,
+              attributes: ['id', 'nickname'],
+            },
+            {
+              model: Image,
+            },
+          ],
+        },
+      ],
+    });
+    res.status(200).json(posts);
+  } catch (error) {
+    console.error(error);
+    next(error);
   }
 });
 
@@ -214,40 +312,6 @@ router.delete('/:userId/follow', isLoggedIn, async (req, res, next) => {
     }
     await user.removeFollowers(req.user.id);
     res.status(200).json({ UserId: parseInt(req.params.userId, 10) });
-  } catch (err) {
-    console.error(err);
-    next(err);
-  }
-});
-
-// GET /user/:userId/followers--- 팔로우 목록 조회
-router.get('/followers', isLoggedIn, async (req, res, next) => {
-  try {
-    const user = await User.findOne({
-      where: { id: req.user.id },
-    });
-    if (!user) {
-      res.status(403).send('존재하지 않는 유저입니다.');
-    }
-    const followers = await user.getFollowers();
-    res.status(200).json(followers);
-  } catch (err) {
-    console.error(err);
-    next(err);
-  }
-});
-
-// GET /user/:userId/followings --- 팔로우 목록 조회
-router.get('/followings', isLoggedIn, async (req, res, next) => {
-  try {
-    const user = await User.findOne({
-      where: { id: req.user.id },
-    });
-    if (!user) {
-      res.status(403).send('존재하지 않는 유저입니다.');
-    }
-    const followings = await user.getFollowings();
-    res.status(200).json(followings);
   } catch (err) {
     console.error(err);
     next(err);
